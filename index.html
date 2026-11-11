@@ -1,0 +1,739 @@
+<title>JARVIS</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&display=swap">
+
+<style>
+/* ================================================================
+   JARVIS — Iron Man HUD Interface
+   Single dark theme (arc-reactor palette)
+   Layout: full-viewport canvas bg, centered reactor, fixed chrome
+   ================================================================ */
+
+:root {
+  --bg:       #000912;
+  --panel:    rgba(0, 22, 44, 0.70);
+  --cyan:     #00d4ff;
+  --cyan-50:  rgba(0, 212, 255, 0.50);
+  --cyan-25:  rgba(0, 212, 255, 0.25);
+  --cyan-10:  rgba(0, 212, 255, 0.10);
+  --cyan-05:  rgba(0, 212, 255, 0.05);
+  --blue:     #0077cc;
+  --blue-30:  rgba(0, 119, 204, 0.30);
+  --gold:     #ffaa00;
+  --gold-30:  rgba(255, 170, 0, 0.30);
+  --text:     #9fd8ef;
+  --text-60:  rgba(159, 216, 239, 0.60);
+  --text-35:  rgba(159, 216, 239, 0.35);
+  --danger:   #ff3355;
+  --success:  #00ffaa;
+  --font-hud: 'Orbitron', 'Arial', sans-serif;
+  --font-dat: 'Share Tech Mono', 'Courier New', monospace;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-dat);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0;
+}
+
+/* ---- Fixed background layers ---- */
+#bg-canvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+
+.scanlines {
+  position: fixed; inset: 0; z-index: 1; pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 3px,
+    rgba(0,212,255,0.013) 3px, rgba(0,212,255,0.013) 4px
+  );
+}
+
+.vignette {
+  position: fixed; inset: 0; z-index: 2; pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 35%, rgba(0,9,18,0.80) 100%);
+}
+
+/* ---- HUD Corners ---- */
+.corner { position: fixed; z-index: 20; }
+.corner::before, .corner::after {
+  content: ''; position: absolute;
+  background: var(--cyan);
+  box-shadow: 0 0 10px var(--cyan-50);
+}
+.corner::before { width: 2px; height: 48px; }
+.corner::after  { width: 48px; height: 2px; }
+
+.corner-tl { top: 20px; left: max(20px, env(safe-area-inset-left, 0px)); }
+.corner-tl::before { top: 0; left: 0; }
+.corner-tl::after  { top: 0; left: 0; }
+
+.corner-tr { top: 20px; right: max(20px, env(safe-area-inset-right, 0px)); }
+.corner-tr::before { top: 0; right: 0; }
+.corner-tr::after  { top: 0; right: 0; }
+
+.corner-bl { bottom: 20px; left: max(20px, env(safe-area-inset-left, 0px)); }
+.corner-bl::before { bottom: 0; left: 0; }
+.corner-bl::after  { bottom: 0; left: 0; }
+
+.corner-br { bottom: 20px; right: max(20px, env(safe-area-inset-right, 0px)); }
+.corner-br::before { bottom: 0; right: 0; }
+.corner-br::after  { bottom: 0; right: 0; }
+
+/* ---- Top Status Bar ---- */
+.top-bar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+  height: 56px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 max(80px, calc(env(safe-area-inset-left,0px) + 80px))
+              0 max(80px, calc(env(safe-area-inset-right,0px) + 80px));
+  font-size: 10px; letter-spacing: 0.18em; color: var(--text-35);
+  border-bottom: 1px solid rgba(0,212,255,0.08);
+}
+.top-bar .live  { color: var(--cyan); }
+.top-bar .clock {
+  font-family: var(--font-hud); font-size: 14px; font-weight: 600;
+  color: var(--text); letter-spacing: 0.25em;
+}
+.top-bar .dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--success); margin-right: 6px;
+  box-shadow: 0 0 8px var(--success);
+  animation: pulse-dot 2s ease-in-out infinite;
+  vertical-align: middle;
+}
+
+/* ---- Side Panels ---- */
+.side-panel {
+  position: fixed; top: 56px; bottom: 100px; z-index: 15;
+  width: 68px;
+  display: flex; flex-direction: column; justify-content: center; gap: 18px;
+  padding: 0 4px;
+}
+.side-left  { left: max(10px, env(safe-area-inset-left, 0px)); }
+.side-right { right: max(10px, env(safe-area-inset-right, 0px)); align-items: flex-end; }
+
+.metric { font-size: 9px; letter-spacing: 0.08em; line-height: 1; }
+.metric-label { color: var(--text-35); display: block; margin-bottom: 3px; }
+.metric-val   { color: var(--cyan); font-size: 11px; display: block; margin-bottom: 4px; }
+.metric-bar   { height: 2px; background: var(--cyan-05); width: 56px; overflow: hidden; }
+.metric-fill  { height: 100%; background: var(--cyan); box-shadow: 0 0 6px var(--cyan-50); transition: width 1.5s ease; }
+.side-right .metric-bar { margin-left: auto; }
+
+/* ---- Main App ---- */
+#app {
+  position: relative; z-index: 10;
+  height: 100%; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 0; padding-top: 56px; padding-bottom: 90px;
+}
+
+/* ---- Center Section ---- */
+.center { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+
+.jarvis-title {
+  font-family: var(--font-hud); font-size: clamp(10px,2.5vw,13px);
+  font-weight: 400; letter-spacing: 0.7em; color: var(--text-35);
+  text-transform: uppercase;
+}
+
+/* ---- Arc Reactor ---- */
+.arc-wrap {
+  position: relative;
+  width: clamp(150px,22vw,210px);
+  height: clamp(150px,22vw,210px);
+  flex-shrink: 0;
+}
+
+.arc-glow-bg {
+  position: absolute; inset: -24px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(0,100,200,0.18) 0%, transparent 70%);
+  animation: breathe 3.5s ease-in-out infinite;
+}
+
+/* SVG reactor sits at full size */
+.arc-svg {
+  width: 100%; height: 100%;
+  overflow: visible;
+}
+
+/* spinning groups inside SVG are animated via CSS */
+.ring-spin-cw  { transform-origin: 100px 100px; animation: spin-cw  18s linear infinite; }
+.ring-spin-ccw { transform-origin: 100px 100px; animation: spin-ccw 12s linear infinite; }
+.ring-spin-slow{ transform-origin: 100px 100px; animation: spin-cw  35s linear infinite; }
+
+.core-pulse { animation: core-pulse 2.2s ease-in-out infinite; }
+
+/* ---- Goal Area ---- */
+.goal-area {
+  text-align: center; min-height: 90px;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  max-width: min(560px, 90vw);
+  padding: 0 20px;
+}
+
+.goal-label {
+  font-size: 9px; letter-spacing: 0.45em; color: var(--text-35);
+  text-transform: uppercase;
+}
+
+.goal-text {
+  font-family: var(--font-hud);
+  font-size: clamp(13px, 3vw, 20px);
+  font-weight: 700;
+  color: var(--cyan);
+  text-shadow: 0 0 16px var(--cyan-50), 0 0 40px var(--cyan-25);
+  letter-spacing: 0.06em;
+  line-height: 1.4;
+  text-wrap: balance;
+  animation: glow-pulse 3s ease-in-out infinite;
+  transition: color 0.5s;
+}
+.goal-text.idle {
+  color: var(--text-35);
+  text-shadow: none;
+  animation: blink-cursor 1.1s step-end infinite;
+  font-size: clamp(11px, 2vw, 14px);
+  font-weight: 400;
+  font-family: var(--font-dat);
+  letter-spacing: 0.2em;
+}
+
+.progress-track {
+  width: min(320px,80vw); height: 2px;
+  background: var(--cyan-05);
+  overflow: hidden;
+  display: none;
+}
+.progress-track.active { display: block; }
+.progress-track::after {
+  content: '';
+  display: block; height: 100%;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  animation: scan-h 1.4s linear infinite;
+}
+
+.response-line {
+  font-size: 10px; letter-spacing: 0.12em;
+  color: var(--gold); line-height: 1.6;
+  text-align: center; max-width: min(500px,88vw);
+  opacity: 0; transition: opacity 0.6s ease;
+}
+.response-line.show { opacity: 1; }
+
+/* ---- Input Section ---- */
+.input-wrap {
+  position: fixed;
+  bottom: max(28px, calc(env(safe-area-inset-bottom, 0px) + 14px));
+  left: 0; right: 0; z-index: 20;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 0 max(80px, calc(env(safe-area-inset-left,0px) + 80px));
+}
+
+.input-row {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; max-width: 580px;
+  background: var(--panel);
+  border: 1px solid var(--cyan-25);
+  border-radius: 2px;
+  padding: 8px 12px;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 0 24px var(--cyan-05), inset 0 0 16px var(--cyan-05);
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.input-row:focus-within {
+  border-color: var(--cyan-50);
+  box-shadow: 0 0 32px var(--cyan-10), inset 0 0 20px var(--cyan-05);
+}
+
+.input-prefix {
+  font-size: 11px; letter-spacing: 0.08em; color: var(--cyan);
+  white-space: nowrap; flex-shrink: 0;
+}
+
+#goal-input {
+  flex: 1; min-width: 0;
+  background: transparent; border: none; outline: none;
+  color: var(--text); font-family: var(--font-dat);
+  font-size: 13px; letter-spacing: 0.04em;
+  caret-color: var(--cyan);
+}
+#goal-input::placeholder { color: var(--text-35); }
+
+.btn-voice, .btn-exec {
+  flex-shrink: 0; cursor: pointer;
+  background: transparent; border: 1px solid var(--cyan-25);
+  border-radius: 2px; color: var(--cyan);
+  font-family: var(--font-dat); font-size: 10px; letter-spacing: 0.12em;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+.btn-voice { width: 34px; height: 34px; padding: 0; }
+.btn-exec  { padding: 7px 14px; }
+
+.btn-voice:hover, .btn-exec:hover {
+  border-color: var(--cyan); background: var(--cyan-05);
+  box-shadow: 0 0 12px var(--cyan-10);
+}
+.btn-voice.listening {
+  border-color: var(--danger); color: var(--danger);
+  box-shadow: 0 0 16px rgba(255,51,85,0.45);
+  animation: pulse-ring-red 0.9s ease-in-out infinite;
+}
+
+.input-hint {
+  font-size: 9px; letter-spacing: 0.18em; color: var(--text-35); text-align: center;
+}
+
+/* ---- Keyframes ---- */
+@keyframes spin-cw  { to { transform: rotate(360deg); } }
+@keyframes spin-ccw { to { transform: rotate(-360deg); } }
+@keyframes breathe  {
+  0%,100% { transform: scale(0.94); opacity: 0.6; }
+  50%     { transform: scale(1.06); opacity: 1; }
+}
+@keyframes core-pulse {
+  0%,100% { filter: drop-shadow(0 0 8px #00d4ff) drop-shadow(0 0 20px #0055cc); }
+  50%     { filter: drop-shadow(0 0 16px #00e8ff) drop-shadow(0 0 40px #0088ff); }
+}
+@keyframes glow-pulse {
+  0%,100% { text-shadow: 0 0 10px var(--cyan-50), 0 0 30px var(--cyan-25); }
+  50%     { text-shadow: 0 0 20px var(--cyan),    0 0 50px var(--cyan-25), 0 0 80px var(--cyan-10); }
+}
+@keyframes blink-cursor {
+  0%,100% { opacity: 1; } 50% { opacity: 0.4; }
+}
+@keyframes scan-h {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
+}
+@keyframes pulse-dot {
+  0%,100% { box-shadow: 0 0 6px var(--success); }
+  50%     { box-shadow: 0 0 14px var(--success); }
+}
+@keyframes pulse-ring-red {
+  0%,100% { box-shadow: 0 0 8px rgba(255,51,85,0.4); }
+  50%     { box-shadow: 0 0 22px rgba(255,51,85,0.9); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition-duration: 0.01ms !important; }
+}
+
+/* ---- Mobile ---- */
+@media (max-width: 540px) {
+  .side-panel  { display: none; }
+  .input-wrap  { padding: 0 max(16px, env(safe-area-inset-left, 0px)); }
+  .top-bar {
+    padding: 0 max(68px, calc(env(safe-area-inset-left,0px)+68px))
+                0 max(68px, calc(env(safe-area-inset-right,0px)+68px));
+    font-size: 9px;
+  }
+}
+</style>
+
+<!-- Background & overlays -->
+<canvas id="bg-canvas"></canvas>
+<div class="scanlines"></div>
+<div class="vignette"></div>
+
+<!-- HUD Corners -->
+<div class="corner corner-tl"></div>
+<div class="corner corner-tr"></div>
+<div class="corner corner-bl"></div>
+<div class="corner corner-br"></div>
+
+<!-- Top bar -->
+<div class="top-bar">
+  <span><span class="dot"></span>SYSTEM <span class="live">ONLINE</span></span>
+  <span class="clock" id="clock">00:00:00</span>
+  <span>POWER <span class="live">ARC REACTOR</span></span>
+</div>
+
+<!-- Side panels -->
+<div class="side-panel side-left" id="panel-left"></div>
+<div class="side-panel side-right" id="panel-right"></div>
+
+<!-- Main content -->
+<div id="app">
+  <div class="center">
+    <div class="jarvis-title">J . A . R . V . I . S .</div>
+
+    <!-- Arc Reactor -->
+    <div class="arc-wrap">
+      <div class="arc-glow-bg"></div>
+      <svg class="arc-svg" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="cg" cx="50%" cy="50%" r="50%">
+            <stop offset="0%"   stop-color="#ffffff" stop-opacity="1"/>
+            <stop offset="30%"  stop-color="#b0ecff" stop-opacity="1"/>
+            <stop offset="70%"  stop-color="#0066ff" stop-opacity="0.9"/>
+            <stop offset="100%" stop-color="#001133" stop-opacity="0"/>
+          </radialGradient>
+          <radialGradient id="mg" cx="50%" cy="50%" r="50%">
+            <stop offset="0%"   stop-color="rgba(0,212,255,0.15)"/>
+            <stop offset="100%" stop-color="transparent"/>
+          </radialGradient>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="2.5" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        <!-- Outer dashed orbit -->
+        <g class="ring-spin-slow">
+          <circle cx="100" cy="100" r="92"
+            stroke="rgba(0,212,255,0.18)" stroke-width="1"
+            stroke-dasharray="3 9" fill="none"/>
+          <circle cx="100" cy="8" r="3" fill="#00d4ff" opacity="0.7"/>
+        </g>
+
+        <!-- Ring 1 (CW) -->
+        <g class="ring-spin-cw" filter="url(#glow)">
+          <circle cx="100" cy="100" r="78"
+            stroke="#00d4ff" stroke-width="1.5"
+            stroke-dasharray="1 0" fill="none" opacity="0.85"/>
+          <!-- marker dot at top -->
+          <circle cx="100" cy="22" r="4" fill="#00d4ff"/>
+          <!-- marker dot at bottom -->
+          <circle cx="100" cy="178" r="2.5" fill="#00d4ff" opacity="0.5"/>
+        </g>
+
+        <!-- Ring 2 (CCW) -->
+        <g class="ring-spin-ccw">
+          <circle cx="100" cy="100" r="62"
+            stroke="#0088cc" stroke-width="1" fill="none" opacity="0.60"/>
+          <circle cx="100" cy="38" r="3" fill="#0088cc" opacity="0.8"/>
+          <circle cx="100" cy="162" r="3" fill="#0088cc" opacity="0.8"/>
+        </g>
+
+        <!-- Hexagon (static) -->
+        <polygon
+          points="100,56 134.6,78 134.6,122 100,144 65.4,122 65.4,78"
+          stroke="#00d4ff" stroke-width="1.5" fill="rgba(0,212,255,0.04)"
+          opacity="0.70" filter="url(#glow)"/>
+
+        <!-- Inner triangle -->
+        <polygon
+          points="100,70 128,118 72,118"
+          stroke="#00aaff" stroke-width="1" fill="rgba(0,170,255,0.08)"
+          opacity="0.60"/>
+
+        <!-- Mid glow fill -->
+        <circle cx="100" cy="100" r="30" fill="url(#mg)"/>
+
+        <!-- Core -->
+        <circle cx="100" cy="100" r="22" fill="url(#cg)" class="core-pulse"/>
+
+        <!-- Tick marks (static ring) -->
+        <g opacity="0.35">
+          <line x1="100" y1="8" x2="100" y2="14" stroke="#00d4ff" stroke-width="1" transform="rotate(0 100 100)"/>
+          <line x1="100" y1="8" x2="100" y2="13" stroke="#00d4ff" stroke-width="1" transform="rotate(30 100 100)"/>
+          <line x1="100" y1="8" x2="100" y2="13" stroke="#00d4ff" stroke-width="1" transform="rotate(60 100 100)"/>
+          <line x1="100" y1="8" x2="100" y2="14" stroke="#00d4ff" stroke-width="1" transform="rotate(90 100 100)"/>
+          <line x1="100" y1="8" x2="100" y2="13" stroke="#00d4ff" stroke-width="1" transform="rotate(120 100 100)"/>
+          <line x1="100" y1="8" x2="100" y2="13" stroke="#00d4ff" stroke-width="1" transform="rotate(150 100 100)"/>
+          <line x1="100" y1="8" x2="100" y2="14" stroke="#00d4ff" stroke-width="1" transform="rotate(180 100 100)"/>
+          <line x1="100" y1="8" x2="100" y2="13" stroke="#00d4ff" stroke-width="1" transform="rotate(210 100 100)"/>
+          <line x1="100" y1="8" x2="100" y2="13" stroke="#00d4ff" stroke-width="1" transform="rotate(240 100 100)"/>
+          <line x1="100" y1="8" x2="100" y2="14" stroke="#00d4ff" stroke-width="1" transform="rotate(270 100 100)"/>
+          <line x1="100" y1="8" x2="100" y2="13" stroke="#00d4ff" stroke-width="1" transform="rotate(300 100 100)"/>
+          <line x1="100" y1="8" x2="100" y2="13" stroke="#00d4ff" stroke-width="1" transform="rotate(330 100 100)"/>
+        </g>
+      </svg>
+    </div>
+
+    <!-- Goal display -->
+    <div class="goal-area">
+      <div class="goal-label">ACTIVE DIRECTIVE</div>
+      <div class="goal-text idle" id="goal-display">AWAITING DIRECTIVE...</div>
+      <div class="progress-track" id="progress"></div>
+      <div class="response-line" id="response"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Input -->
+<div class="input-wrap">
+  <div class="input-row">
+    <span class="input-prefix">DIRECTIVE &gt;</span>
+    <input type="text" id="goal-input"
+      placeholder="Ziel eingeben oder sprechen..."
+      autocomplete="off" spellcheck="false">
+    <button class="btn-voice" id="btn-voice" title="Spracheingabe">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <rect x="5" y="1" width="6" height="9" rx="3"
+          stroke="currentColor" stroke-width="1.5"/>
+        <path d="M2.5 8C2.5 11.038 5 13.5 8 13.5s5.5-2.462 5.5-5.5"
+          stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="8" y1="13.5" x2="8" y2="15.5"
+          stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    </button>
+    <button class="btn-exec" id="btn-exec">EXECUTE</button>
+  </div>
+  <div class="input-hint" id="hint">ZIEL EINGEBEN ODER MIKROFON DRÜCKEN — ENTER ZUM AUSFÜHREN</div>
+</div>
+
+<script>
+// ================================================================
+// JARVIS Interface Controller
+// ================================================================
+
+const $ = id => document.getElementById(id);
+
+// ---- Live Clock ----
+function tick() {
+  const d = new Date();
+  $('clock').textContent =
+    [d.getHours(), d.getMinutes(), d.getSeconds()]
+    .map(n => String(n).padStart(2,'0')).join(':');
+}
+tick();
+setInterval(tick, 1000);
+
+// ---- Background Canvas ----
+(function() {
+  const canvas = $('bg-canvas');
+  const ctx = canvas.getContext('2d');
+  let W, H, scanY = 0, frame = 0;
+
+  function resize() {
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // Hex grid geometry
+  const HR = 42, HH = HR * Math.sqrt(3), HW = HR * 2;
+  function hexPath(cx, cy, r) {
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI / 3) * i - Math.PI / 6;
+      const x = cx + r * Math.cos(a), y = cy + r * Math.sin(a);
+      i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+    }
+    ctx.closePath();
+  }
+
+  // Particles
+  const P = Array.from({length: 35}, () => ({
+    x: Math.random() * innerWidth,
+    y: Math.random() * innerHeight,
+    vx: (Math.random()-.5) * .28,
+    vy: (Math.random()-.5) * .28,
+    r: Math.random() * 1.8 + .4,
+    a: Math.random() * .4 + .08,
+    ph: Math.random() * Math.PI * 2
+  }));
+
+  // Glowing hexes
+  const GH = [];
+
+  function draw() {
+    requestAnimationFrame(draw);
+    ctx.clearRect(0, 0, W, H);
+    frame++;
+
+    // Hex grid
+    const cols = Math.ceil(W / (HW*.75)) + 2;
+    const rows = Math.ceil(H / HH) + 2;
+    ctx.strokeStyle = 'rgba(0,180,220,0.055)';
+    ctx.lineWidth = .6;
+    for (let c = -1; c < cols; c++) {
+      for (let r = -1; r < rows; r++) {
+        const x = c * HW * .75;
+        const y = r * HH + (c % 2 === 0 ? 0 : HH/2);
+        hexPath(x, y, HR - 1.5);
+        ctx.stroke();
+      }
+    }
+
+    // Random hex flash
+    if (frame % 55 === 0 && GH.length < 6) {
+      const c = Math.floor(Math.random() * cols);
+      const r = Math.floor(Math.random() * rows);
+      GH.push({
+        x: c * HW * .75,
+        y: r * HH + (c % 2 === 0 ? 0 : HH/2),
+        life: 1
+      });
+    }
+    GH.forEach((h,i) => {
+      ctx.fillStyle = `rgba(0,212,255,${h.life * .07})`;
+      hexPath(h.x, h.y, HR - 1.5);
+      ctx.fill();
+      h.life -= .018;
+    });
+    for (let i = GH.length - 1; i >= 0; i--) if (GH[i].life <= 0) GH.splice(i,1);
+
+    // Scan beam
+    scanY = (scanY + .7) % H;
+    const sg = ctx.createLinearGradient(0, scanY - 55, 0, scanY + 55);
+    sg.addColorStop(0,   'transparent');
+    sg.addColorStop(.5,  'rgba(0,212,255,0.038)');
+    sg.addColorStop(1,   'transparent');
+    ctx.fillStyle = sg;
+    ctx.fillRect(0, scanY - 55, W, 110);
+
+    // Particles
+    P.forEach(p => {
+      p.x += p.vx; p.y += p.vy; p.ph += .018;
+      if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
+      if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+      ctx.fillStyle = `rgba(0,212,255,${p.a * (.5 + .5 * Math.sin(p.ph))})`;
+      ctx.fill();
+    });
+  }
+  draw();
+})();
+
+// ---- Side Panel Metrics ----
+const LEFT_M  = [
+  {id:'pw', label:'POWER',  min:88, max:98,  unit:'%', cur:94},
+  {id:'sh', label:'SHIELD', min:62, max:85,  unit:'%', cur:75},
+  {id:'nn', label:'NEURAL', min:380,max:620, unit:'Hz',cur:490},
+  {id:'ai', label:'A.I.',   min:70, max:100, unit:'%', cur:85},
+];
+const RIGHT_M = [
+  {id:'th', label:'THREAT', min:0,  max:20,  unit:'',  cur:4},
+  {id:'co', label:'COMMS',  min:92, max:100, unit:'%', cur:97},
+  {id:'tp', label:'TEMP',   min:20, max:38,  unit:'°C',cur:27},
+  {id:'en', label:'ENERGY', min:75, max:100, unit:'%', cur:88},
+];
+
+function panelHTML(metrics, isRight) {
+  return metrics.map(m => {
+    const pct = Math.round(((m.cur - m.min) / (m.max - m.min)) * 100);
+    const disp = m.unit === 'Hz' ? Math.round(m.cur) :
+                 m.unit === '°C' ? m.cur.toFixed(1) : Math.round(m.cur);
+    return `<div class="metric">
+      <span class="metric-label">${m.label}</span>
+      <span class="metric-val">${disp}${m.unit}</span>
+      <div class="metric-bar"><div class="metric-fill" id="mf-${m.id}" style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+}
+
+$('panel-left').innerHTML  = panelHTML(LEFT_M,  false);
+$('panel-right').innerHTML = panelHTML(RIGHT_M, true);
+
+function updateMetrics() {
+  [...LEFT_M, ...RIGHT_M].forEach(m => {
+    const delta = (Math.random() - .5) * (m.max - m.min) * .06;
+    m.cur = Math.max(m.min, Math.min(m.max, m.cur + delta));
+    const el = document.getElementById(`mf-${m.id}`);
+    if (el) el.style.width = Math.round(((m.cur - m.min)/(m.max - m.min))*100) + '%';
+  });
+}
+setInterval(updateMetrics, 2200);
+
+// ---- JARVIS Response Engine ----
+const RESPONSES = [
+  "Directive received. Allocating computational resources.",
+  "Acknowledged. Initiating strategic analysis protocols.",
+  "Target parameters locked. Processing execution pathway.",
+  "Confirmed. Running probability matrices — stand by.",
+  "Directive logged. Optimization algorithms engaged.",
+  "Calculating highest-probability success vector.",
+  "Mission parameters accepted. Tactical frameworks initialized.",
+  "Understood. Deploying all available resources.",
+];
+
+function getResponse(goal) {
+  const lo = goal.toLowerCase();
+
+  const moneyMatch = goal.match(/(\d[\d.,]*)\s*(€|eur|euro)/i);
+  if (moneyMatch || /verdien|earn|money|geld|income|profit/i.test(lo)) {
+    const amt = moneyMatch ? moneyMatch[1] + '€' : 'financial target';
+    return `Revenue objective of ${amt} registered. Scanning market channels, opportunity matrices, and resource optimization pathways. Probability analysis in progress.`;
+  }
+  if (/code|program|develop|build|app|software/i.test(lo))
+    return "Development directive logged. Engaging code synthesis protocols and architectural analysis frameworks.";
+  if (/learn|lern|study|studie|wissen|knowledge/i.test(lo))
+    return "Knowledge acquisition objective registered. Structuring optimal learning pathways and cognitive frameworks.";
+  if (/health|gesundheit|fit|sport|train|workout|exercise/i.test(lo))
+    return "Physical optimization directive received. Monitoring biometric parameters and performance trajectory.";
+  if (/invest|aktie|stock|krypto|crypto|market/i.test(lo))
+    return "Investment directive logged. Analyzing market vectors, risk matrices, and capital allocation strategies.";
+
+  return RESPONSES[Math.floor(Math.random() * RESPONSES.length)];
+}
+
+// ---- Goal Submission ----
+function execute() {
+  const input = $('goal-input');
+  const raw = input.value.trim();
+  if (!raw) return;
+
+  const display  = $('goal-display');
+  const progress = $('progress');
+  const response = $('response');
+
+  display.textContent = raw.toUpperCase();
+  display.classList.remove('idle');
+
+  response.classList.remove('show');
+  response.textContent = '';
+  progress.classList.add('active');
+
+  setTimeout(() => {
+    progress.classList.remove('active');
+    response.textContent = getResponse(raw);
+    response.classList.add('show');
+  }, 1700);
+
+  input.value = '';
+}
+
+$('btn-exec').addEventListener('click', execute);
+$('goal-input').addEventListener('keydown', e => { if (e.key === 'Enter') execute(); });
+
+// ---- Voice Recognition ----
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const voiceBtn = $('btn-voice');
+const hint     = $('hint');
+let recog = null, listening = false;
+
+if (SR) {
+  recog = new SR();
+  recog.lang = navigator.language || 'de-DE';
+  recog.continuous = false;
+  recog.interimResults = false;
+
+  recog.onresult = e => {
+    $('goal-input').value = e.results[0][0].transcript;
+    stopListen();
+    execute();
+  };
+  recog.onerror = stopListen;
+  recog.onend   = stopListen;
+
+  voiceBtn.addEventListener('click', () => listening ? stopListen() : startListen());
+} else {
+  voiceBtn.style.opacity = '.3';
+  voiceBtn.style.cursor  = 'not-allowed';
+  voiceBtn.title = 'Spracheingabe nicht unterstützt';
+}
+
+function startListen() {
+  listening = true;
+  voiceBtn.classList.add('listening');
+  hint.textContent = 'HÖRE ZU... DIREKTIVE SPRECHEN';
+  try { recog.start(); } catch(e) { stopListen(); }
+}
+function stopListen() {
+  listening = false;
+  voiceBtn.classList.remove('listening');
+  hint.textContent = 'ZIEL EINGEBEN ODER MIKROFON DRÜCKEN — ENTER ZUM AUSFÜHREN';
+  try { recog.stop(); } catch(e) {}
+}
+</script>
